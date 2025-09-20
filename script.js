@@ -1,22 +1,19 @@
-// script.js (v5.1 - Kittokito Inspired Design)
+// script.js (v5.2 - Robust Fee Calculation)
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz2k7VL9AF-gSWfOC-iTx_OaWLeQkDFccoBCicC82u2RO72cf-eWuYmEu-zegKXsHnEYQ/exec';
 
 window.addEventListener('DOMContentLoaded', () => {
-    // --- Element Declarations ---
+    // --- Element Declarations (No changes) ---
     const form = document.getElementById('order-form');
     const menuContainer = document.getElementById('menu-container');
     const loadingMessage = document.getElementById('loading-menu');
-    const statusMessage = document.getElementById('status-message');
     const getLocationBtn = document.getElementById('get-location-btn');
     const locationStatus = document.getElementById('location-status');
     const totalPriceValue = document.getElementById('total-price-value');
     const grandTotalValue = document.getElementById('grand-total-value');
     const reviewOrderBtn = document.getElementById('review-order-btn');
-
     const summaryModal = document.getElementById('summary-modal');
     const customerSummary = document.getElementById('customer-summary');
     const orderSummaryList = document.getElementById('order-summary-list');
-    const costSummary = document.getElementById('cost-summary');
     const summaryFoodTotal = document.getElementById('summary-food-total');
     const summaryDistance = document.getElementById('summary-distance');
     const summaryDeliveryFee = document.getElementById('summary-delivery-fee');
@@ -24,7 +21,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const modalSpinner = document.getElementById('modal-spinner');
     const editOrderBtn = document.getElementById('edit-order-btn');
     const confirmOrderBtn = document.getElementById('confirm-order-btn');
-    
     const thankYouModal = document.getElementById('thank-you-modal');
     const closeThankYouBtn = document.getElementById('close-thank-you-btn');
     
@@ -35,8 +31,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // --- Main Functions ---
     async function fetchMenu() {
         try {
-            const response = await fetch(`${WEB_APP_URL}?action=getMenu`);
-            if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+            // This still uses GET, which is fine for fetching the menu
+            const response = await fetch(WEB_APP_URL); 
+            if (!response.ok) throw new Error(`Network response was not ok`);
             const result = await response.json();
             if (result.status === 'success') {
                 menuData = result.data;
@@ -120,7 +117,6 @@ window.addEventListener('DOMContentLoaded', () => {
     function collectOrderData() {
         const orderDetails = [];
         let foodTotal = 0;
-
         document.querySelectorAll('.quantity-display').forEach(display => {
             const qty = parseInt(display.textContent, 10);
             if (qty > 0) {
@@ -132,13 +128,11 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (selectedOption) itemName += ` (${selectedOption.value})`;
                     const specialRequest = document.querySelector(`.special-request-input[data-itemid="${itemID}"]`).value.trim();
                     if (specialRequest) itemName += ` [${specialRequest}]`;
-                    
                     orderDetails.push({ name: itemName, qty: qty, price: item.Price, total: item.Price * qty });
                     foodTotal += item.Price * qty;
                 }
             }
         });
-
         return {
             name: document.getElementById('customer-name').value,
             phone: document.getElementById('customer-phone').value,
@@ -172,26 +166,33 @@ window.addEventListener('DOMContentLoaded', () => {
             alert("กรุณากด 'ขอตำแหน่งปัจจุบัน' ก่อนครับ"); return;
         }
         if (!form.checkValidity()) {
-            form.reportValidity(); // This will show the browser's default validation messages
-            return;
+            form.reportValidity(); return;
         }
-        
         currentOrderData = collectOrderData();
-
         if (currentOrderData.orderDetailsRaw.length === 0) {
             alert("กรุณาเลือกอาหารอย่างน้อย 1 รายการ"); return;
         }
         
         summaryModal.classList.add('active');
         modalSpinner.style.display = 'block';
-        costSummary.style.display = 'none';
+        document.getElementById('cost-summary').style.display = 'none';
         confirmOrderBtn.style.display = 'none';
 
         customerSummary.innerHTML = `<div><strong>ชื่อ:</strong> ${currentOrderData.name}</div><div><strong>โทร:</strong> ${currentOrderData.phone}</div><div><strong>ที่อยู่:</strong> ${currentOrderData.address}</div>`;
         orderSummaryList.innerHTML = currentOrderData.orderDetailsRaw.map(item => `<div class="item-line"><span>- ${item.name} (x${item.qty})</span> <span>${item.total} บ.</span></div>`).join('');
 
         try {
-            const feeResponse = await fetch(`${WEB_APP_URL}?action=getFee&lat=${currentOrderData.latitude}&lng=${currentOrderData.longitude}`);
+            // **อัปเกรด:** เปลี่ยนเป็น "ส่งจดหมายถาม" (POST)
+            const feeResponse = await fetch(WEB_APP_URL, {
+                method: 'POST',
+                // **สำคัญ:** ไม่ใช้ mode: 'no-cors' ที่นี่ เพราะเราต้องการอ่านคำตอบ
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'calculateFee',
+                    lat: currentOrderData.latitude,
+                    lng: currentOrderData.longitude
+                })
+            });
             if (!feeResponse.ok) throw new Error("Server error calculating fee.");
             const feeResult = await feeResponse.json();
 
@@ -212,7 +213,7 @@ window.addEventListener('DOMContentLoaded', () => {
             summaryGrandTotal.textContent = "N/A";
         } finally {
             modalSpinner.style.display = 'none';
-            costSummary.style.display = 'block';
+            document.getElementById('cost-summary').style.display = 'block';
             if (currentOrderData.deliveryFee !== -1) {
                 confirmOrderBtn.style.display = 'block';
             }
@@ -226,11 +227,13 @@ window.addEventListener('DOMContentLoaded', () => {
     confirmOrderBtn.addEventListener('click', () => {
         confirmOrderBtn.disabled = true;
         confirmOrderBtn.textContent = 'กำลังส่ง...';
-
+        
+        // **อัปเกรด:** เพิ่ม action: 'submitOrder' เพื่อความชัดเจน
         const finalOrderPayload = { ...currentOrderData, action: 'submitOrder' };
 
         fetch(WEB_APP_URL, {
-            method: 'POST', mode: 'no-cors',
+            method: 'POST',
+            mode: 'no-cors', // Use no-cors ONLY for the final submission
             body: JSON.stringify(finalOrderPayload)
         })
         .then(() => {
