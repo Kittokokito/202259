@@ -1,4 +1,4 @@
-// script.js (v5.2 - Robust Fee Calculation)
+// script.js (v5.4 - CORS Preflight Fix)
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz2k7VL9AF-gSWfOC-iTx_OaWLeQkDFccoBCicC82u2RO72cf-eWuYmEu-zegKXsHnEYQ/exec';
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -31,7 +31,6 @@ window.addEventListener('DOMContentLoaded', () => {
     // --- Main Functions ---
     async function fetchMenu() {
         try {
-            // This still uses GET, which is fine for fetching the menu
             const response = await fetch(WEB_APP_URL); 
             if (!response.ok) throw new Error(`Network response was not ok`);
             const result = await response.json();
@@ -182,11 +181,10 @@ window.addEventListener('DOMContentLoaded', () => {
         orderSummaryList.innerHTML = currentOrderData.orderDetailsRaw.map(item => `<div class="item-line"><span>- ${item.name} (x${item.qty})</span> <span>${item.total} บ.</span></div>`).join('');
 
         try {
-            // **อัปเกรด:** เปลี่ยนเป็น "ส่งจดหมายถาม" (POST)
             const feeResponse = await fetch(WEB_APP_URL, {
                 method: 'POST',
-                // **สำคัญ:** ไม่ใช้ mode: 'no-cors' ที่นี่ เพราะเราต้องการอ่านคำตอบ
-                headers: { 'Content-Type': 'application/json' },
+                // **แก้ไข:** เปลี่ยนเป็น text/plain เพื่อหลีกเลี่ยง OPTIONS request
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
                     action: 'calculateFee',
                     lat: currentOrderData.latitude,
@@ -228,7 +226,6 @@ window.addEventListener('DOMContentLoaded', () => {
         confirmOrderBtn.disabled = true;
         confirmOrderBtn.textContent = 'กำลังส่ง...';
         
-        // **อัปเกรด:** เพิ่ม action: 'submitOrder' เพื่อความชัดเจน
         const finalOrderPayload = { ...currentOrderData, action: 'submitOrder' };
 
         fetch(WEB_APP_URL, {
